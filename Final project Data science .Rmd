@@ -1,0 +1,139 @@
+---
+title: "Final Project Data science:Session 1"
+author: "Ariadna Merino"
+date: "2026-10-19"
+output: pdf_document
+---
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tibble)
+```
+
+Step 1: load data and filter desireble gene
+```{r}
+#load data
+covar <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_covar-1.csv")
+geneExpression <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_geneExpression.csv") |> 
+  column_to_rownames("X")
+geneNames <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_geneNames.csv")
+#Check dataset
+dim(covar)
+dim(geneExpression)
+dim(geneNames)
+
+#ID for the STIR3
+geneNames %>%
+  filter(GENE == "SSTR3")
+```
+Step 2: Cleaning and matching our data.
+```{r}
+STR.ID <-geneNames[which(geneNames$GENE== "SSTR3") , "PROBEID"]
+STR.ID <- as.character(STR.ID)
+
+t(geneExpression)[ ,STR.ID]
+
+row.names(covar)
+t(geneExpression)[ covar$geoID,STR.ID]
+
+covar$SSTR3 <- t(geneExpression)[ covar$geoID,STR.ID]
+
+# Continuous covariate: Maternal Vitamin D
+covar$mat_vitD <- as.numeric(
+  sub(".*: ", "", covar$mat_vitD)
+)
+
+# Categorical covariate 1: Preeclampsia
+covar$preg_preeclampsia <- factor(
+  sub(".*: ", "", covar$preg_preeclampsia)
+)
+
+# Clean maternal BMI
+covar$mat_BMI <- as.numeric(
+  sub(".*: ", "", covar$mat_BMI)
+)
+
+# Categorical covariate 2: BMI group
+covar$BMI_group <- ifelse(
+  covar$mat_BMI < 25,
+  "BMI below 25",
+  "BMI 25 or higher"
+)
+
+covar$BMI_group <- factor(covar$BMI_group)
+
+# Check the variables
+summary(covar$mat_vitD)
+table(covar$preg_preeclampsia)
+table(covar$BMI_group, useNA = "ifany")
+```
+Step 4:Calculate the median of maternal age 
+```{r}
+#Cleanaing maternal data
+covar$mat_age_yrs <- as.numeric(
+  sub(".*: ", "", covar$mat_age_yrs)
+)
+
+#Calculate maternal median age
+median(covar$mat_age_yrs, na.rm = TRUE)
+
+```
+Step 5: Graph1-HISTOGRAM
+```{r}
+plot1 <- ggplot(covar, aes(x = SSTR3)) +
+  geom_histogram(
+    bins = 20,
+    fill = "plum",
+    color = "white",
+    linewidth = 0.4
+  ) +
+  labs(
+    title = "Distribution of SSTR3 Gene Expression",
+    x = "SSTR3 Gene Expression",
+    y = "Number of Participants"
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 15,
+      hjust = 0.5
+    ),
+    axis.title = element_text(
+      face = "bold",
+      size = 12
+    ),
+    axis.text = element_text(size = 11)
+  )
+plot1
+```
+_Figure 1_:  
+
+
+Step 7:
+
+
+
+Step 8: Create the boxplot
+```{r}
+
+
+```
+_Figure 3_
+
+Step 10:Check number of participants in each group 
+```{r}
+
+```
+
+```{r}
+
+
+```
