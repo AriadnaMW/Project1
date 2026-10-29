@@ -1,0 +1,51 @@
+---
+title: 'Final Project Data Science: Session 2'
+author: "Ariadna Merino"
+date: "2026-10-28"
+output: pdf_document
+---
+Step 1: Load the packages and gene names
+```{r}
+#Load packages
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tibble)
+
+geneNames <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_geneNames.csv")
+head(geneNames)
+
+# Load covariate and gene expresion data
+covar <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_covar-1.csv")
+geneExpression <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_geneExpression.csv") |>
+  column_to_rownames("X")
+
+dim(covar)
+dim(geneExpression)
+
+```
+
+Step 2: Select three genes for analysis
+```{r}
+# Select SSTR3, CNR1, and NFYC
+selecgenes <- c("SSTR3", "CNR1", "NFYC")
+# Find the probe IDs for our selected genes
+geneNames %>%
+  filter(GENE %in% selecgenes)
+```
+
+Step 3: Cleaning and matching our data for the 3 genes
+```{r}
+# Match gene expression values for our three genes
+for (gene in selecgenes) {
+  geneID <- as.character(geneNames[
+    geneNames$GENE == gene, "PROBEID"
+  ])
+  covar[,gene] <- as.numeric(geneExpression[geneID, covar$geoID])
+}
+View(geneExpression) 
+
+
+```
+
+
