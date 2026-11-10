@@ -1,0 +1,114 @@
+---
+title: "Final summission Data science"
+author: "Ariadna Merino"
+date: "2026-11-09"
+output: pdf_document
+---
+Load data and packages 
+```{r}
+# Load packages
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tibble)
+
+# Load gene names
+geneNames <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_geneNames.csv")
+
+# Load covariate data
+covar <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_covar-1.csv")
+
+# Load gene expression data
+geneExpression <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_geneExpression.csv") |>
+  column_to_rownames("X")
+
+# Check dimensions
+dim(covar)
+dim(geneExpression)
+```
+
+Step 2:Match gene expression data with covariate data
+```{r}
+biomarker <- t(geneExpression)
+
+biomarker <- biomarker[covar$geoID, ]
+
+dim(biomarker)
+
+all(rownames(biomarker) == covar$geoID)
+```
+Step 3: Select the three genes
+```{r}
+selecgenes <- c("SSTR3", "CNR1", "NFYC")
+
+geneNames %>%
+  filter(GENE %in% selecgenes)
+```
+Step 4: Add selected genes to covariate data
+```{r}
+for (i in 1:length(selecgenes)) {
+  
+  probe <- geneNames$PROBEID[geneNames$GENE == selecgenes[i]]
+  
+  covar[[selecgenes[i]]] <- biomarker[, as.character(probe)]
+  
+}
+
+dim(covar)
+```
+Step 5: Prepare the covariates
+```{r}
+covar <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_covar-1.csv")
+
+covar$mat_age_yrs <- as.numeric(sub(".*: ", "", covar$mat_age_yrs))
+covar$mat_BMI <- as.numeric(sub(".*: ", "", covar$mat_BMI))
+covar$mat_vitD <- as.numeric(sub(".*: ", "", covar$mat_vitD))
+
+covar$preg_preeclampsia <- sub(".*: ", "", covar$preg_preeclampsia)
+
+covar$BMI_group <- ifelse(covar$mat_BMI < 25, "<25", ">=25")
+
+table(covar$BMI_group)
+```
+Step 6: Prepare final dataset
+```{r}
+for (i in 1:length(selecgenes)) {
+  probe <- geneNames$PROBEID[geneNames$GENE == selecgenes[i]]
+  covar[[selecgenes[i]]] <- biomarker[, as.character(probe)]
+}
+
+cleandata <- covar[, c(
+  "mat_age_yrs", "mat_BMI", "mat_vitD",
+  "preg_preeclampsia", "BMI_group",
+  selecgenes
+)]
+
+dim(cleandata)
+
+```
+Step 7: Create the summary statistics table
+```{r}
+summary_table <- cleandata %>%
+  group_by(preg_preeclampsia) %>%
+  summarise(
+    n = n(),
+    Age_Mean = mean(mat_age_yrs, na.rm = TRUE),
+    Age_SD = sd(mat_age_yrs, na.rm = TRUE),
+    BMI_Mean = mean(mat_BMI, na.rm = TRUE),
+    BMI_SD = sd(mat_BMI, na.rm = TRUE),
+    VitaminD_Mean = mean(mat_vitD, na.rm = TRUE),
+    VitaminD_SD = sd(mat_vitD, na.rm = TRUE)
+  )
+
+summary_table
+```
+Step 8: BMI group summary
+```{r}
+bmi_table <- cleandata %>%
+  group_by(preg_preeclampsia, BMI_group) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(preg_preeclampsia) %>%
+  mutate(Percent = round(n / sum(n) * 100, 1))
+
+bmi_table
+```
