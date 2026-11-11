@@ -1,0 +1,248 @@
+---
+title: "FinalSumDS"
+author: "Ariadna Merino"
+date: "2026-11-10"
+output: pdf_document
+---
+Step 1: Load data
+```{r}
+# Load packages
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tibble)
+
+# Load gene names
+geneNames <- read.csv("~/Downloads/GSE85307_geneNames.csv")
+
+# Load covariate data
+covar <- read.csv("~/Downloads/GSE85307_covar-1.csv")
+
+# Load gene expression data
+geneExpression <- read.csv("~/Downloads/GSE85307_geneExpression.csv") |>
+  column_to_rownames("X")
+
+# Check dimensions
+dim(covar)
+dim(geneExpression)
+```
+
+Step 2: Match the data
+```{r}
+# Step 2: Match gene expression data with covariate data
+
+biomarker <- t(geneExpression)
+
+biomarker <- biomarker[covar$geoID, ]
+
+# Check dimensions
+dim(biomarker)
+
+# Check if samples match
+all(rownames(biomarker) == covar$geoID)
+```
+Step 3: Select the three genes
+```{r}
+selecgenes <- c("SSTR3", "CNR1", "NFYC")
+
+geneNames %>%
+  filter(GENE %in% selecgenes)
+
+```
+Step 4: Add selected genes to covariate data
+```{r}
+for (i in 1:length(selecgenes)) {
+  
+  probe <- geneNames$PROBEID[geneNames$GENE == selecgenes[i]]
+  
+  covar[[selecgenes[i]]] <- biomarker[, as.character(probe)]
+  
+}
+
+dim(covar)
+
+```
+
+Step 5: Prepare the covariates
+```{r}
+covar <- read.csv("/Users/ariadnamerino/Downloads/GSE85307_covar-1.csv")
+
+covar$mat_age_yrs <- as.numeric(sub(".*: ", "", covar$mat_age_yrs))
+covar$mat_BMI <- as.numeric(sub(".*: ", "", covar$mat_BMI))
+covar$mat_vitD <- as.numeric(sub(".*: ", "", covar$mat_vitD))
+
+covar$preg_preeclampsia <- sub(".*: ", "", covar$preg_preeclampsia)
+
+covar$BMI_group <- ifelse(covar$mat_BMI < 25, "<25", ">=25")
+
+table(covar$BMI_group)
+
+```
+Step 6: Prepare final dataset
+```{r}
+for (i in 1:length(selecgenes)) {
+  probe <- geneNames$PROBEID[geneNames$GENE == selecgenes[i]]
+  covar[[selecgenes[i]]] <- biomarker[, as.character(probe)]
+}
+
+cleandata <- covar[, c(
+  "mat_age_yrs", "mat_BMI", "mat_vitD",
+  "preg_preeclampsia", "BMI_group",
+  selecgenes
+)]
+
+dim(cleandata)
+
+```
+Step 7: Create the summary statistics table
+```{r}
+summary_table <- cleandata %>%
+  group_by(preg_preeclampsia) %>%
+  summarise(
+    n = n(),
+    Age_Mean = mean(mat_age_yrs, na.rm = TRUE),
+    Age_SD = sd(mat_age_yrs, na.rm = TRUE),
+    BMI_Mean = mean(mat_BMI, na.rm = TRUE),
+    BMI_SD = sd(mat_BMI, na.rm = TRUE),
+    VitaminD_Mean = mean(mat_vitD, na.rm = TRUE),
+    VitaminD_SD = sd(mat_vitD, na.rm = TRUE)
+  )
+
+summary_table
+```
+Step 8: BMI group summary
+```{r}
+bmi_table <- cleandata %>%
+  group_by(preg_preeclampsia, BMI_group) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(preg_preeclampsia) %>%
+  mutate(Percent = round(n / sum(n) * 100, 1))
+
+bmi_table
+```
+
+ Step 9: Select 10 genes for heatmap
+```{r}
+heatmap_genes <- c(
+  "SSTR3", "CNR1", "NFYC",
+  "PTX3", "LINC00661", "PDCD7",
+  "UNC13A", "SOCS5", "CCDC87", "HAUS4"
+)
+
+# Match genes to probe IDs
+probe_ids <- geneNames$PROBEID[
+  match(heatmap_genes, geneNames$GENE)
+]
+
+# Check that all genes are available
+all(as.character(probe_ids) %in% colnames(biomarker))
+```
+Step 10: Create heatmap
+```{r}
+
+library(pheatmap)
+
+# Prepare gene expression data
+heatmap_data <- t(biomarker[, as.character(probe_ids)])
+rownames(heatmap_data) <- heatmap_genes
+
+# Add categorical variables
+annotation <- data.frame(
+  Preeclampsia = cleandata$preg_preeclampsia,
+  BMI_Group = cleandata$BMI_group
+)
+
+rownames(annotation) <- rownames(biomarker)
+
+# Create heatmap
+pheatmap(
+  heatmap_data,
+  scale = "row",
+  annotation_col = annotation,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_colnames = FALSE,
+  main = "Gene Expression Heatmap"
+)
+```
+Step 11:Calculate mean expression differences
+```{r}
+# Add pregnancy status to gene expression data
+plot_data <- as.data.frame(t(heatmap_data))
+plot_data$Preeclampsia <- cleandata$preg_preeclampsia
+
+# Calculate mean expression for each gene
+gene_means <- plot_data %>%
+  group_by(Preeclampsia) %>%
+  summarise(across(all_of(heatmap_genes), mean))
+
+# Calculate differences between groups
+gene_diff <- data.frame(
+  Gene = heatmap_genes,
+  Difference = as.numeric(gene_means[gene_means$Preeclampsia == "Preeclampsia", -1]) -
+               as.numeric(gene_means[gene_means$Preeclampsia == "Normal", -1])
+)
+
+gene_diff
+```
+Step 13: Create the lollipop plot
+```{r}
+ggplot(gene_diff, aes(x = Difference, y = reorder(Gene, Difference))) +
+  geom_segment(aes(x = 0, xend = Difference,
+                   yend = reorder(Gene, Difference)),
+               color = "gray60", linewidth = 0.8) +
+  geom_point(aes(color = Difference > 0), size = 4) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_color_manual(
+    values = c("TRUE" = "hotpink", "FALSE" = "cornflowerblue"),
+    labels = c("FALSE" = "Higher in Normal",
+               "TRUE" = "Higher in Preeclampsia"),
+    name = "Expression"
+  ) +
+  labs(
+    title = "Gene Expression Differences by Pregnancy Status",
+    x = "Mean Expression Difference (Preeclampsia - Normal)",
+    y = "Gene"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.y = element_text(face = "italic"),
+    legend.position = "bottom"
+  )
+```
+Step 14: Circular bar plot
+```{r}
+
+gene_diff$Gene <- factor(
+  gene_diff$Gene,
+  levels = gene_diff$Gene
+)
+
+ggplot(gene_diff,
+       aes(x = Gene, y = abs(Difference),
+           fill = Difference > 0)) +
+  geom_col(width = 0.8) +
+  coord_polar() +
+  scale_fill_manual(
+    values = c("TRUE" = "hotpink",
+               "FALSE" = "cornflowerblue"),
+    labels = c("FALSE" = "Higher in Normal",
+               "TRUE" = "Higher in Preeclampsia"),
+    name = "Expression"
+  ) +
+  labs(
+    title = "Gene Expression Differences by Pregnancy Status",
+    x = NULL,
+    y = "Absolute Mean Expression Difference"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(face = "italic"),
+    legend.position = "bottom"
+  )
+
+
+
+```
